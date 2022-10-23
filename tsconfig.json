@@ -2,11 +2,11 @@
     "compilerOptions": {
       "module": "commonjs",
       "esModuleInterop": true,
-      "target": "es2021",
+      "target": "es2020",
       "moduleResolution": "node",
       "strict": true,
       "sourceMap": true,
-      "lib": ["es2021"],
+      "lib": ["es2020"],
       "skipLibCheck": true,
       "rootDir": "src",
       "outDir": "dist"
