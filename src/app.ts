@@ -8,6 +8,19 @@ import { ModuleCondensed, ModuleInformation } from "./types/nusmods";
 import { InlineQueryResultArticle } from "telegraf/typings/core/types/typegram";
 
 import { addHours, format } from "date-fns";
+
+import { Index, Document, Worker } from "flexsearch-ts";
+const options = {};
+let index = new Document({
+    document: {
+        id: "moduleCode",
+        index: ["moduleCode", "title"],
+    },
+    tokenize: "full",
+});
+// let document = new Document(options);
+// let worker = new Worker(options);
+
 dotenv.config();
 const bot: Telegraf<Context<Update>> = new Telegraf(
     process.env.BOT_TOKEN as string
@@ -20,45 +33,123 @@ bot.start((ctx) => {
 });
 let runs = 0;
 
-let CACHE:{
-    lastUpdated?: number,
-    moduleList?: ModuleInformation[],
-    moduleCodeString?: string,
-} = {}
+let CACHE: {
+    lastUpdated?: number;
+    moduleList?: ModuleInformation[];
+    moduleCodeString?: string;
+} = {};
 
 let MEMO: {
     searchString: string;
     results: ModuleInformation[];
-}[] = []
+}[] = [];
 
 bot.on("inline_query", async (ctx) => {
-
     try {
-        runs = runs + 1
+        runs = runs + 1;
         console.time(`query ${runs}`);
-        
+
         const query = ctx.inlineQuery.query.trim().toUpperCase();
         if (query.length < 2) return console.timeEnd(`query ${runs}`);
 
-        if (!CACHE.lastUpdated || Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24) {
-            console.log("Updating cache")
-            const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
-            const moduleList = await res.json() as ModuleInformation[];
-            CACHE.moduleList = moduleList
-            CACHE.lastUpdated = Date.now();
-            CACHE.moduleCodeString = CACHE.moduleList.map(m => m.moduleCode).join(" ");
-        }
-        
-      
-        const moduleList: ModuleInformation[] = CACHE.moduleList as ModuleInformation[];
+
+        // Potential solution for searching (15ms improvement)
+        /*
+     
+        if (
+            !CACHE.lastUpdated ||
+            Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24
+        ) {
+            // Update cache
+            // first, remove all documents from index
+            if (CACHE.moduleList) {
+                const oldDocs = CACHE.moduleList.map((x, index) => ({
+                    moduleCode: x.moduleCode.toLowerCase(),
+                    title: x.title.toLowerCase(),
+                    id: index,
+                }));
+                oldDocs.forEach((doc) => index.remove(doc));
+                index.remove(oldDocs);    
+            }
+
+
+            const res = await fetch(
+                "https://api.nusmods.com/v2/2022-2023/moduleInfo.json"
+            );
+            const resJ = (await res.json()) as ModuleInformation[];
+            const docs = resJ.map((x, index) => ({
+                moduleCode: x.moduleCode.toLowerCase(),
+                title: x.title.toLowerCase(),
+                id: index,
+            }));
     
+            docs.forEach((doc) => index.add(doc));
+
+            CACHE.moduleList = resJ;
+            CACHE.lastUpdated = Date.now();
+            CACHE.moduleCodeString = CACHE.moduleList
+                .map((m) => m.moduleCode)
+                .join(" ");
+
+            // Remember to invalidate MEMO
+            MEMO = [];
+        }
+
+
+        const searchResult = index.search(query.toLowerCase(), {
+            index: ["moduleCode", "title"],
+        });
+        // console.log(searchResult)
+        const filteredModuleCodes = searchResult.flatMap((x) => x.result);
+        // console.log(filteredModuleCodes)
+      
+        const filteredList: ModuleInformation[] = []
+        filteredModuleCodes.forEach((moduleCode) => { 
+            const module = CACHE.moduleList?.find((x) => x.moduleCode.toLowerCase() === moduleCode);
+            if (module){
+                filteredList.push(module);
+            }
+        })
+
+ 
+        */
+
+     
+        
+
+        if (
+            !CACHE.lastUpdated ||
+            Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24
+        ) {
+            console.log("Updating cache");
+            const res = await fetch(
+                "https://api.nusmods.com/v2/2022-2023/moduleInfo.json"
+            );
+            const moduleList = (await res.json()) as ModuleInformation[];
+            CACHE.moduleList = moduleList;
+            CACHE.lastUpdated = Date.now();
+            CACHE.moduleCodeString = CACHE.moduleList
+                .map((m) => m.moduleCode)
+                .join(" ");
+
+            // Remember to invalidate MEMO
+            MEMO = [];
+        }
+
+        const moduleList: ModuleInformation[] =
+            CACHE.moduleList as ModuleInformation[];
+
         let listToFilter = [];
-        // check if the current search string is a superstring of the previous search string 
-        if (MEMO.length > 0 && query.includes(MEMO[MEMO.length - 1].searchString)) {
-            console.log("Found item in memo")
-            listToFilter = MEMO[MEMO.length - 1].results;
+
+        const matchedSubstring = MEMO.find((memo) =>
+            query.includes(memo.searchString)
+        );
+
+        if (MEMO.length > 0 && matchedSubstring) {
+            console.log("Found item in memo");
+            listToFilter = matchedSubstring.results;
         } else {
-            listToFilter = moduleList
+            listToFilter = moduleList;
         }
 
         const filteredList = listToFilter.filter(
@@ -67,6 +158,7 @@ bot.on("inline_query", async (ctx) => {
                 module.title.toUpperCase().includes(query)
         );
 
+        
         // lowest moduleCode number first.
         // Note that we don't have to sort by alphabetical module code because it's
         // already sorted alphabetically from NUSMods.
@@ -77,17 +169,16 @@ bot.on("inline_query", async (ctx) => {
             return parseInt(aCode) - parseInt(bCode);
         });
 
-
         // store the sorted list in memo
         if (MEMO.length > 25) {
-            // delete the first item
-            MEMO.shift();
+            // delete the last
+            MEMO.pop();
         }
 
-        MEMO.push({
+        MEMO.unshift({
             searchString: query,
-            results: sortedList
-        })
+            results: sortedList,
+        });
 
         const result: InlineQueryResultArticle[] = sortedList.map((module) => {
             return {
@@ -105,7 +196,7 @@ bot.on("inline_query", async (ctx) => {
         const trimmedResults = result.slice(0, 50);
 
         await ctx.answerInlineQuery(trimmedResults, {
-            cache_time: 6 * 60 * 60,
+            cache_time: 0,
         });
         console.timeEnd(`query ${runs}`);
     } catch (e) {
@@ -145,7 +236,7 @@ function buildMessage(module: ModuleInformation) {
             })
             .join("\n");
     }
-    
+
     msg += `\n\n`;
 
     msg += `${module.description ? trim(module.description, 256) : ""}`;

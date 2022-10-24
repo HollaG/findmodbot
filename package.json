@@ -19,6 +19,8 @@
   "dependencies": {
     "date-fns": "^2.29.3",
     "dotenv": "^16.0.3",
+    "flexsearch": "^0.7.31",
+    "flexsearch-ts": "^0.7.31",
     "node-fetch": "^2.6.7",
     "telegraf": "^4.10.0"
   }
