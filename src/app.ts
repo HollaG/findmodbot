@@ -34,17 +34,17 @@ bot.on("inline_query", async (ctx) => {
         const query = ctx.inlineQuery.query.trim().toUpperCase();
         if (query.length < 2) return console.timeEnd(`query ${runs}`);
 
-        if (!CACHE.lastUpdated || Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24) {
-            console.log("Updating cache")
-            const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
-            CACHE.moduleList = await res.json();
-            CACHE.lastUpdated = Date.now();
-        }
+        // if (!CACHE.lastUpdated || Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24) {
+        //     console.log("Updating cache")
+        //     const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
+        //     CACHE.moduleList = await res.json();
+        //     CACHE.lastUpdated = Date.now();
+        // }
         
       
-        const moduleList: ModuleInformation[] = CACHE.moduleList as ModuleInformation[];
-        // const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
-        // const moduleList: ModuleInformation[] = await res.json();
+        // const moduleList: ModuleInformation[] = CACHE.moduleList as ModuleInformation[];
+        const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
+        const moduleList: ModuleInformation[] = await res.json();
         const filteredList = moduleList.filter(
             (module) =>
                 module.moduleCode.toUpperCase().includes(query) ||
