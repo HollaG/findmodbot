@@ -11,7 +11,7 @@ const date_fns_1 = require("date-fns");
 dotenv_1.default.config();
 const bot = new telegraf_1.Telegraf(process.env.BOT_TOKEN);
 bot.start((ctx) => {
-    ctx.reply(`This bot only works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules starting with GEA, type \n@${ctx.me} GEA`);
+    ctx.reply(`This bot only works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`);
 });
 bot.on("inline_query", async (ctx) => {
     try {
@@ -56,21 +56,62 @@ function buildMessage(module) {
     let msg = `<b><u><a href='https://nusmods.com/modules/${module.moduleCode}'>${module.moduleCode} ${module.title}</a></u></b>\n`;
     msg += `${module.department}, ${module.faculty}\n`;
     msg += `${module.moduleCredit} MC ${module.attributes?.su ? "(Eligible for S/U)" : "(Ineligible for S/U)"}\n\n`;
-    let semestersWithExams = module.semesterData.filter((sem) => sem.examDate);
-    if (semestersWithExams.length) {
-        msg += semestersWithExams
-            .map((sem) => `Sem ${sem.semester} Exam: ${(0, date_fns_1.format)(new Date(sem.examDate || new Date()), "dd MMM yyyy h:mm a")} ${sem.examDuration && `(${sem.examDuration / 60} hrs)\n`}`)
-            .join("");
-        msg += "\n";
+    if (module.semesterData.length === 0) {
+        msg += `This module is not offered in this academic year!`;
     }
     else {
-        msg += `No exams for this module.\n\n`;
+        msg += `Offered in ${module.semesterData
+            .map((sem) => convertSemesterNumber(sem.semester))
+            .join(", ")}\n\n`;
+        msg += module.semesterData
+            .map((sem) => {
+            if (sem.examDate) {
+                return `${convertSemesterNumber(sem.semester)} Exam: ${(0, date_fns_1.format)((0, date_fns_1.addHours)(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
+                "dd MMM yyyy h:mm a")} ${sem.examDuration && `(${sem.examDuration / 60} hrs)`}`;
+            }
+            else {
+                return `${convertSemesterNumber(sem.semester)} Exam: No exam`;
+            }
+        })
+            .join("\n");
     }
+    msg += `\n\n`;
+    // let semestersWithExams = module.semesterData.filter((sem) => sem.examDate);
+    // if (semestersWithExams.length) {
+    //     msg += semestersWithExams
+    //         .map(
+    //             (sem) =>
+    //                 `${convertSemesterNumber(sem.semester)} Exam: ${format(
+    //                     addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
+    //                     "dd MMM yyyy h:mm a"
+    //                 )} ${
+    //                     sem.examDuration && `(${sem.examDuration / 60} hrs)\n`
+    //                 }`
+    //         )
+    //         .join("");
+    //     msg += "\n";
+    // } else {
+    //     msg += `No exams for this module.\n\n`;
+    // }
     msg += `${module.description ? trim(module.description, 256) : ""}`;
     return msg;
 }
 function trim(str, length) {
     return str.length > length ? str.substring(0, length - 3) + "..." : str;
+}
+function convertSemesterNumber(sem) {
+    switch (sem) {
+        case 1:
+            return "Sem 1";
+        case 2:
+            return "Sem 2";
+        case 3:
+            return "ST 1";
+        case 4:
+            return "ST 2";
+        default:
+            return "Unknown";
+    }
 }
 bot.launch();
 //# sourceMappingURL=app.js.map
