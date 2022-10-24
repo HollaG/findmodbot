@@ -18,17 +18,33 @@ bot.start((ctx) => {
         `This bot only works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
     );
 });
+let runs = 0;
+
+let CACHE:{
+    lastUpdated?: number,
+    moduleList?: ModuleInformation[]
+} = {}
 
 bot.on("inline_query", async (ctx) => {
+
     try {
+        runs = runs + 1
+        console.time(`query ${runs}`);
+        
         const query = ctx.inlineQuery.query.trim().toUpperCase();
-        if (query.length < 2) return;
+        if (query.length < 2) return console.timeEnd(`query ${runs}`);
 
-        const moduleListResponse = await fetch(
-            "https://api.nusmods.com/v2/2022-2023/moduleInfo.json"
-        );
-        const moduleList: ModuleInformation[] = await moduleListResponse.json();
-
+        if (!CACHE.lastUpdated || Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24) {
+            console.log("Updating cache")
+            const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
+            CACHE.moduleList = await res.json();
+            CACHE.lastUpdated = Date.now();
+        }
+        
+      
+        const moduleList: ModuleInformation[] = CACHE.moduleList as ModuleInformation[];
+        // const res = await fetch("https://api.nusmods.com/v2/2022-2023/moduleList.json");
+        // const moduleList: ModuleInformation[] = await res.json();
         const filteredList = moduleList.filter(
             (module) =>
                 module.moduleCode.toUpperCase().includes(query) ||
@@ -60,9 +76,10 @@ bot.on("inline_query", async (ctx) => {
         // limit results to 50.
         const trimmedResults = result.slice(0, 50);
 
-        ctx.answerInlineQuery(trimmedResults, {
+        await ctx.answerInlineQuery(trimmedResults, {
             cache_time: 0,
         });
+        console.timeEnd(`query ${runs}`);
     } catch (e) {
         console.log(e);
     }
@@ -76,7 +93,7 @@ function buildMessage(module: ModuleInformation) {
         module.attributes?.su ? "(Eligible for S/U)" : "(Ineligible for S/U)"
     }\n\n`;
 
-    if (module.semesterData.length === 0) {
+    if (!module.semesterData || module.semesterData.length === 0) {
         msg += `This module is not offered in this academic year!`;
     } else {
         msg += `Offered in ${module.semesterData
@@ -102,24 +119,6 @@ function buildMessage(module: ModuleInformation) {
     }
     
     msg += `\n\n`;
-
-    // let semestersWithExams = module.semesterData.filter((sem) => sem.examDate);
-    // if (semestersWithExams.length) {
-    //     msg += semestersWithExams
-    //         .map(
-    //             (sem) =>
-    //                 `${convertSemesterNumber(sem.semester)} Exam: ${format(
-    //                     addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
-    //                     "dd MMM yyyy h:mm a"
-    //                 )} ${
-    //                     sem.examDuration && `(${sem.examDuration / 60} hrs)\n`
-    //                 }`
-    //         )
-    //         .join("");
-    //     msg += "\n";
-    // } else {
-    //     msg += `No exams for this module.\n\n`;
-    // }
 
     msg += `${module.description ? trim(module.description, 256) : ""}`;
 
