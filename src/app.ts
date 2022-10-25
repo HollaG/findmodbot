@@ -31,7 +31,7 @@ const bot: Telegraf<Context<Update>> = new Telegraf(
 
 bot.start((ctx) => {
     ctx.reply(
-        `This bot only works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
+        `Send a message to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
     );
 });
 let runs = 0;
