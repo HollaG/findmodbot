@@ -5,7 +5,10 @@ console.log("Running file");
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 import { ModuleCondensed, ModuleInformation } from "./types/nusmods";
-import { InlineQueryResultArticle } from "telegraf/typings/core/types/typegram";
+import {
+    InlineKeyboardButton,
+    InlineQueryResultArticle,
+} from "telegraf/typings/core/types/typegram";
 
 import { addHours, format } from "date-fns";
 
@@ -113,51 +116,9 @@ bot.on("inline_query", async (ctx) => {
  
         */
 
-        await updateCache()
+        await updateCache();
 
-        const moduleList: ModuleInformation[] =
-            CACHE.moduleList as ModuleInformation[];
-
-        let listToFilter = [];
-
-        const matchedSubstring = MEMO.find((memo) =>
-            query.includes(memo.searchString)
-        );
-
-        if (MEMO.length > 0 && matchedSubstring) {
-            console.log("Found item in memo");
-            listToFilter = matchedSubstring.results;
-        } else {
-            listToFilter = moduleList;
-        }
-
-        const filteredList = listToFilter.filter(
-            (module) =>
-                module.moduleCode.toUpperCase().includes(query) ||
-                module.title.toUpperCase().includes(query)
-        );
-
-        // lowest moduleCode number first.
-        // Note that we don't have to sort by alphabetical module code because it's
-        // already sorted alphabetically from NUSMods.
-        const sortedList = filteredList.sort((a, b) => {
-            // remove all non-numeric characters
-            const aCode = a.moduleCode.replace(/\D/g, "");
-            const bCode = b.moduleCode.replace(/\D/g, "");
-            return parseInt(aCode) - parseInt(bCode);
-        });
-
-        // store the sorted list in memo
-        if (MEMO.length > 25) {
-            // delete the last
-            MEMO.pop();
-        }
-
-        MEMO.unshift({
-            searchString: query,
-            results: sortedList,
-        });
-
+        const sortedList = search(query);
         const result: InlineQueryResultArticle[] = sortedList.map((module) => {
             return {
                 type: "article",
@@ -230,29 +191,155 @@ bot.on("callback_query", async (ctx) => {
             );
 
             if (module) {
-                const newMsesageText = buildFullMessage(module);
+                const newMessageText = buildFullMessage(module);
 
                 // update the message
                 ctx.telegram.editMessageText(
                     undefined,
                     undefined,
                     msgId,
-                    newMsesageText,
+                    newMessageText,
                     {
                         parse_mode: "HTML",
                         reply_markup: {
-                            inline_keyboard: []
-                        }
-                    },
+                            inline_keyboard: [],
+                        },
+                    }
                 );
             } else {
-                ctx.telegram.answerCbQuery("Module not found! Please try again at a later time.")
+                ctx.telegram.answerCbQuery(
+                    "Module not found! Please try again at a later time."
+                );
+            }
+        }
+
+        if (cbData?.startsWith("module|")) {
+            const moduleCode = cbData.split("|")[1];
+
+            await updateCache();
+            const module = CACHE.moduleList?.find(
+                (m) => m.moduleCode === moduleCode
+            );
+
+            if (module) {
+                const msg = buildFullMessage(module);
+                ctx.telegram.sendMessage(ctx.callbackQuery.from.id, msg, {
+                    parse_mode: "HTML",
+                });
             }
         }
     } catch (e) {
-        console.log(e)
+        console.log(e);
     }
 });
+
+bot.command("module", async (ctx) => {
+    console.log(ctx.message.text);
+});
+
+bot.on("text", async (ctx) => {
+    try {
+        if (ctx.chat.type === "private") {
+            // only run in private chat
+
+            // only run if search query 2 < x < 32 chars long
+            const query = ctx.message.text.trim().toUpperCase();
+            if (query.length < 2 || query.length > 32) {
+                return;
+            }
+
+            // trim the query down to 32 characters max
+            const trimmedQuery = query;
+
+            await updateCache();
+            const filteredList = search(trimmedQuery);
+            if (!filteredList.length) {
+                ctx.reply("No results found");
+            } else if (filteredList.length === 1) {
+                const module = filteredList[0];
+                const message = buildFullMessage(module);
+                ctx.reply(message, {
+                    parse_mode: "HTML",
+                });
+            } else {
+                const message = buildListMessage(filteredList);
+                // split the message if it's too long
+
+                const trimmed = filteredList.slice(0, 100);
+                const markup: InlineKeyboardButton[][] = [];
+                let holder: InlineKeyboardButton[] = [];
+
+                for (let i = 0; i < trimmed.length; i++) {
+                    if (holder.length === 3) {
+                        markup.push(holder);
+                        holder = [];
+                    }
+                    holder.push({
+                        text: `${trimmed[i].moduleCode}`,
+                        callback_data: `module|${trimmed[i].moduleCode}`,
+                    });             
+                }
+                markup.push(holder);
+
+                ctx.reply(message, {
+                    parse_mode: "HTML",
+                    reply_markup: {
+                        inline_keyboard: markup,
+                    },
+                });
+            }
+            return;
+        }
+    } catch (e) {
+        console.log(e);
+    }
+});
+
+function search(query: string) {
+    const moduleList: ModuleInformation[] =
+        CACHE.moduleList as ModuleInformation[];
+
+    let listToFilter = [];
+
+    const matchedSubstring = MEMO.find((memo) =>
+        query.includes(memo.searchString)
+    );
+
+    if (MEMO.length > 0 && matchedSubstring) {
+        console.log("Found item in memo");
+        listToFilter = matchedSubstring.results;
+    } else {
+        listToFilter = moduleList;
+    }
+
+    const filteredList = listToFilter.filter(
+        (module) =>
+            module.moduleCode.toUpperCase().includes(query) ||
+            module.title.toUpperCase().includes(query)
+    );
+    // lowest moduleCode number first.
+    // Note that we don't have to sort by alphabetical module code because it's
+    // already sorted alphabetically from NUSMods.
+    const sortedList = filteredList.sort((a, b) => {
+        // remove all non-numeric characters
+        const aCode = a.moduleCode.replace(/\D/g, "");
+        const bCode = b.moduleCode.replace(/\D/g, "");
+        return parseInt(aCode) - parseInt(bCode);
+    });
+
+    // store the sorted list in memo
+    if (MEMO.length > 25) {
+        // delete the last
+        MEMO.pop();
+    }
+
+    if (!matchedSubstring) MEMO.unshift({
+        searchString: query,
+        results: sortedList,
+    });
+    console.log(MEMO.map(x => x.searchString))
+    return sortedList;
+}
 
 async function updateCache() {
     if (
@@ -275,7 +362,6 @@ async function updateCache() {
     }
 
     return true;
-
 }
 
 function buildMessage(module: ModuleInformation) {
@@ -296,16 +382,16 @@ function buildMessage(module: ModuleInformation) {
         msg += module.semesterData
             .map((sem) => {
                 if (sem.examDate) {
-                    return `${convertSemesterNumber(
+                    return `<u>${convertSemesterNumber(
                         sem.semester
-                    )} Exam: ${format(
+                    )} Exam</u>\n${format(
                         addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
                         "dd MMM yyyy h:mm a"
                     )} ${sem.examDuration && `(${sem.examDuration / 60} hrs)`}`;
                 } else {
-                    return `${convertSemesterNumber(
+                    return `<u>${convertSemesterNumber(
                         sem.semester
-                    )} Exam: No exam`;
+                    )} Exam</u>\nNo exam`;
                 }
             })
             .join("\n");
@@ -336,16 +422,16 @@ function buildFullMessage(module: ModuleInformation) {
         msg += module.semesterData
             .map((sem) => {
                 if (sem.examDate) {
-                    return `${convertSemesterNumber(
+                    return `<u>${convertSemesterNumber(
                         sem.semester
-                    )} Exam: ${format(
+                    )} Exam</u>\n${format(
                         addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
                         "dd MMM yyyy h:mm a"
                     )} ${sem.examDuration && `(${sem.examDuration / 60} hrs)`}`;
                 } else {
-                    return `${convertSemesterNumber(
+                    return `<u>${convertSemesterNumber(
                         sem.semester
-                    )} Exam: No exam`;
+                    )} Exam</u>\nNo exam`;
                 }
             })
             .join("\n");
@@ -355,19 +441,34 @@ function buildFullMessage(module: ModuleInformation) {
 
     msg += `${module.description ? module.description : ""}\n\n`;
 
-    msg += `Prerequisites: ${
+    msg += `<u>Prerequisites</u>\n${
         module.prerequisite ? module.prerequisite : "None"
     }\n\n`;
 
-    msg += `Corequisites: ${
+    msg += `<u>Corequisites</u>\n${
         module.corequisite ? module.corequisite : "None"
     }\n\n`;
 
-    msg += `Preclusions: ${module.preclusion ? module.preclusion : "None"}\n\n`;
+    msg += `<u>Preclusions</u>\n${module.preclusion ? module.preclusion : "None"}\n\n`;
 
-    msg += `Workload: ${
+    msg += `<u>Workload</u>\n${
         module.workload ? module.workload.toString() : "None"
     }\n\n`;
+
+    return msg;
+}
+
+function buildListMessage(modules: ModuleInformation[]) {
+    let msg = `<b>${modules.length} Modules found (showing top 100):</b>\n\n`;
+
+    // max 100 modules
+    modules = modules.slice(0, 100);
+    msg += modules
+        .map(
+            (module, index) =>
+                trim(`${index + 1}. ${module.moduleCode} ${module.title}`, 40)
+        )
+        .join("\n");
 
     return msg;
 }
@@ -391,4 +492,14 @@ function convertSemesterNumber(sem: number) {
     }
 }
 
-bot.launch();
+bot.launch().then(() => console.log("Bot is running!"));
+
+// Enable graceful stop
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+process.on("uncaughtException", console.log);
+process.on("unhandledRejection", console.log);
+process.on("warning", console.log);
+process.on("error", console.log);
+
