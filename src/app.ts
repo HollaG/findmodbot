@@ -52,7 +52,6 @@ bot.on("inline_query", async (ctx) => {
         const query = ctx.inlineQuery.query.trim().toUpperCase();
         if (query.length < 2) return console.timeEnd(`query ${runs}`);
 
-
         // Potential solution for searching (15ms improvement)
         /*
      
@@ -114,27 +113,7 @@ bot.on("inline_query", async (ctx) => {
  
         */
 
-     
-        
-
-        if (
-            !CACHE.lastUpdated ||
-            Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24
-        ) {
-            console.log("Updating cache");
-            const res = await fetch(
-                "https://api.nusmods.com/v2/2022-2023/moduleInfo.json"
-            );
-            const moduleList = (await res.json()) as ModuleInformation[];
-            CACHE.moduleList = moduleList;
-            CACHE.lastUpdated = Date.now();
-            CACHE.moduleCodeString = CACHE.moduleList
-                .map((m) => m.moduleCode)
-                .join(" ");
-
-            // Remember to invalidate MEMO
-            MEMO = [];
-        }
+        await updateCache()
 
         const moduleList: ModuleInformation[] =
             CACHE.moduleList as ModuleInformation[];
@@ -158,7 +137,6 @@ bot.on("inline_query", async (ctx) => {
                 module.title.toUpperCase().includes(query)
         );
 
-        
         // lowest moduleCode number first.
         // Note that we don't have to sort by alphabetical module code because it's
         // already sorted alphabetically from NUSMods.
@@ -189,6 +167,16 @@ bot.on("inline_query", async (ctx) => {
                     message_text: buildMessage(module),
                     parse_mode: "HTML",
                 },
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            {
+                                text: "Loading...",
+                                callback_data: `ignore`,
+                            },
+                        ],
+                    ],
+                },
             };
         });
 
@@ -203,6 +191,92 @@ bot.on("inline_query", async (ctx) => {
         console.log(e);
     }
 });
+
+bot.on("chosen_inline_result", (ctx) => {
+    try {
+        const moduleCode = ctx.chosenInlineResult.result_id;
+        const msgId = ctx.chosenInlineResult.inline_message_id || "";
+
+        // edit the message to add the button which will expand the description
+        if (msgId)
+            ctx.telegram.editMessageReplyMarkup(undefined, undefined, msgId, {
+                inline_keyboard: [
+                    [
+                        {
+                            text: "View more details",
+                            callback_data: `expand|inline|${msgId}|${moduleCode}`,
+                        },
+                    ],
+                ],
+            });
+    } catch (e) {
+        console.log("Error: ", e);
+    }
+});
+
+bot.on("callback_query", async (ctx) => {
+    try {
+        const cbData = ctx.callbackQuery.data;
+
+        if (cbData?.startsWith("expand|inline")) {
+            const [_, __, msgId, moduleCode] = cbData.split("|");
+
+            // Generate a new message with the expanded description
+            // find the module in the cache
+            await updateCache();
+
+            const module = CACHE.moduleList?.find(
+                (m) => m.moduleCode === moduleCode
+            );
+
+            if (module) {
+                const newMsesageText = buildFullMessage(module);
+
+                // update the message
+                ctx.telegram.editMessageText(
+                    undefined,
+                    undefined,
+                    msgId,
+                    newMsesageText,
+                    {
+                        parse_mode: "HTML",
+                        reply_markup: {
+                            inline_keyboard: []
+                        }
+                    },
+                );
+            } else {
+                ctx.telegram.answerCbQuery("Module not found! Please try again at a later time.")
+            }
+        }
+    } catch (e) {
+        console.log(e)
+    }
+});
+
+async function updateCache() {
+    if (
+        !CACHE.lastUpdated ||
+        Date.now() - CACHE.lastUpdated > 1000 * 60 * 60 * 24
+    ) {
+        console.log("Updating cache");
+        const res = await fetch(
+            "https://api.nusmods.com/v2/2022-2023/moduleInfo.json"
+        );
+        const moduleList = (await res.json()) as ModuleInformation[];
+        CACHE.moduleList = moduleList;
+        CACHE.lastUpdated = Date.now();
+        CACHE.moduleCodeString = CACHE.moduleList
+            .map((m) => m.moduleCode)
+            .join(" ");
+
+        // Remember to invalidate MEMO
+        MEMO = [];
+    }
+
+    return true;
+
+}
 
 function buildMessage(module: ModuleInformation) {
     let msg = `<b><u><a href='https://nusmods.com/modules/${module.moduleCode}'>${module.moduleCode} ${module.title}</a></u></b>\n`;
@@ -240,6 +314,60 @@ function buildMessage(module: ModuleInformation) {
     msg += `\n\n`;
 
     msg += `${module.description ? trim(module.description, 256) : ""}`;
+
+    return msg;
+}
+
+function buildFullMessage(module: ModuleInformation) {
+    let msg = `<b><u><a href='https://nusmods.com/modules/${module.moduleCode}'>${module.moduleCode} ${module.title}</a></u></b>\n`;
+
+    msg += `${module.department}, ${module.faculty}\n`;
+    msg += `${module.moduleCredit} MC ${
+        module.attributes?.su ? "(Eligible for S/U)" : "(Ineligible for S/U)"
+    }\n\n`;
+
+    if (!module.semesterData || module.semesterData.length === 0) {
+        msg += `This module is not offered in this academic year!`;
+    } else {
+        msg += `Offered in ${module.semesterData
+            .map((sem) => convertSemesterNumber(sem.semester))
+            .join(", ")}\n\n`;
+
+        msg += module.semesterData
+            .map((sem) => {
+                if (sem.examDate) {
+                    return `${convertSemesterNumber(
+                        sem.semester
+                    )} Exam: ${format(
+                        addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
+                        "dd MMM yyyy h:mm a"
+                    )} ${sem.examDuration && `(${sem.examDuration / 60} hrs)`}`;
+                } else {
+                    return `${convertSemesterNumber(
+                        sem.semester
+                    )} Exam: No exam`;
+                }
+            })
+            .join("\n");
+    }
+
+    msg += `\n\n`;
+
+    msg += `${module.description ? module.description : ""}\n\n`;
+
+    msg += `Prerequisites: ${
+        module.prerequisite ? module.prerequisite : "None"
+    }\n\n`;
+
+    msg += `Corequisites: ${
+        module.corequisite ? module.corequisite : "None"
+    }\n\n`;
+
+    msg += `Preclusions: ${module.preclusion ? module.preclusion : "None"}\n\n`;
+
+    msg += `Workload: ${
+        module.workload ? module.workload.toString() : "None"
+    }\n\n`;
 
     return msg;
 }
