@@ -37,7 +37,7 @@ if (!ACAD_YEAR) {
 
 bot.start((ctx) => {
     ctx.reply(
-        `Send a message to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
+        `<u><i><b>This bot is for accessing NUSMods from within Telegram.</b></i></u>\n\nSend a message (3 to 64 characters long) to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in any chat, even those without the bot in it. \nType @${ctx.me} [your search query] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
     );
 });
 let runs = 0;
@@ -252,11 +252,11 @@ bot.on("text", async (ctx) => {
 
             // only run if search query 2 < x < 32 chars long
             const query = ctx.message.text.trim().toUpperCase();
-            if (query.length < 2 || query.length > 32) {
+            if (query.length < 2 || query.length > 64) {
                 return;
             }
 
-            // trim the query down to 32 characters max
+            // trim the query down to 64 characters max
             const trimmedQuery = query;
 
             await updateCache();
