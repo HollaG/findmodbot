@@ -357,7 +357,7 @@ async function updateCache() {
     ) {
         console.log("Updating cache");
         const res = await fetch(
-            "https://api.nusmods.com/v2/2022-2023/moduleInfo.json"
+            `https://api.nusmods.com/v2/${ACAD_YEAR}/moduleInfo.json`
         );
         const moduleList = (await res.json()) as ModuleInformation[];
         CACHE.moduleList = moduleList;
@@ -487,7 +487,7 @@ function buildFullMessage(module: ModuleInformation) {
 }
 
 function buildListMessage(modules: ModuleInformation[]) {
-    let msg = `<b>${modules.length} Modules found (showing top 100):</b>\n\n`;
+    let msg = `<b>${modules.length} modules found${modules.length > 100 ? " (showing first 100)" : ""}:</b>\n\n`;
 
     // max 100 modules
     modules = modules.slice(0, 100);
@@ -524,7 +524,7 @@ function replaceWithLink(string: string) {
 
     // source: https://stackoverflow.com/questions/31201690/find-word-not-followed-by-a-certain-character
     // https://regex101.com/r/RIlEaj/1
-    const regex = /([A-Z]{2,4}[0-9]{4}([A-Z]){0,3})(?!(%|\/))/gm;
+    const regex = /([A-Z]{2,4}[0-9]{4}([A-Z]){0,3})(?!(%|\/|-))/gm;
 
     const res = string.replace(
         regex,
