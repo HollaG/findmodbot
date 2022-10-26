@@ -151,7 +151,7 @@ bot.on("inline_query", async (ctx) => {
         const trimmedResults = result.slice(0, 50);
 
         await ctx.answerInlineQuery(trimmedResults, {
-            cache_time: 0,
+            cache_time: 30 * 60,
         });
         console.timeEnd(`query ${runs}`);
     } catch (e) {
