@@ -29,6 +29,12 @@ const bot: Telegraf<Context<Update>> = new Telegraf(
     process.env.BOT_TOKEN as string
 );
 
+const ACAD_YEAR = process.env.ACAD_YEAR;
+if (!ACAD_YEAR) {
+    console.log("Academic year not set, set it in .env");
+    process.exit(1);
+}
+
 bot.start((ctx) => {
     ctx.reply(
         `Send a message to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in inline mode. \nType @${ctx.me} [your module search term] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
@@ -206,8 +212,9 @@ bot.on("callback_query", async (ctx) => {
                         },
                     }
                 );
+                ctx.answerCbQuery();
             } else {
-                ctx.telegram.answerCbQuery(
+                ctx.answerCbQuery(
                     "Module not found! Please try again at a later time."
                 );
             }
@@ -223,9 +230,10 @@ bot.on("callback_query", async (ctx) => {
 
             if (module) {
                 const msg = buildFullMessage(module);
-                ctx.telegram.sendMessage(ctx.callbackQuery.from.id, msg, {
+                await ctx.telegram.sendMessage(ctx.callbackQuery.from.id, msg, {
                     parse_mode: "HTML",
                 });
+                ctx.answerCbQuery();
             }
         }
     } catch (e) {
@@ -277,7 +285,7 @@ bot.on("text", async (ctx) => {
                     holder.push({
                         text: `${trimmed[i].moduleCode}`,
                         callback_data: `module|${trimmed[i].moduleCode}`,
-                    });             
+                    });
                 }
                 markup.push(holder);
 
@@ -333,11 +341,12 @@ function search(query: string) {
         MEMO.pop();
     }
 
-    if (!matchedSubstring) MEMO.unshift({
-        searchString: query,
-        results: sortedList,
-    });
-    console.log(MEMO.map(x => x.searchString))
+    if (!matchedSubstring)
+        MEMO.unshift({
+            searchString: query,
+            results: sortedList,
+        });
+    console.log(MEMO.map((x) => x.searchString));
     return sortedList;
 }
 
@@ -373,23 +382,23 @@ function buildMessage(module: ModuleInformation) {
     }\n\n`;
 
     if (!module.semesterData || module.semesterData.length === 0) {
-        msg += `This module is not offered in this academic year!`;
+        msg += `❌ This module is not offered in this academic year!`;
     } else {
-        msg += `Offered in ${module.semesterData
-            .map((sem) => convertSemesterNumber(sem.semester))
-            .join(", ")}\n\n`;
+        msg += `${module.semesterData
+            .map((sem) => `✅ ${convertSemesterNumber(sem.semester)}`)
+            .join("\n")}\n\n`;
 
         msg += module.semesterData
             .map((sem) => {
                 if (sem.examDate) {
-                    return `<u>${convertSemesterNumber(
+                    return `📖 <u>${convertSemesterNumber(
                         sem.semester
                     )} Exam</u>\n${format(
                         addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
                         "dd MMM yyyy h:mm a"
                     )} ${sem.examDuration && `(${sem.examDuration / 60} hrs)`}`;
                 } else {
-                    return `<u>${convertSemesterNumber(
+                    return `📖 <u>${convertSemesterNumber(
                         sem.semester
                     )} Exam</u>\nNo exam`;
                 }
@@ -399,7 +408,7 @@ function buildMessage(module: ModuleInformation) {
 
     msg += `\n\n`;
 
-    msg += `${module.description ? trim(module.description, 256) : ""}`;
+    msg += `${module.description ? replaceWithLink(trim(module.description, 256)) : ""}`;
 
     return msg;
 }
@@ -413,23 +422,23 @@ function buildFullMessage(module: ModuleInformation) {
     }\n\n`;
 
     if (!module.semesterData || module.semesterData.length === 0) {
-        msg += `This module is not offered in this academic year!`;
+        msg += `❌ This module is not offered in this academic year!`;
     } else {
-        msg += `Offered in ${module.semesterData
-            .map((sem) => convertSemesterNumber(sem.semester))
-            .join(", ")}\n\n`;
+        msg += `${module.semesterData
+            .map((sem) => `✅ ${convertSemesterNumber(sem.semester)}`)
+            .join("\n")}\n\n`;
 
         msg += module.semesterData
             .map((sem) => {
                 if (sem.examDate) {
-                    return `<u>${convertSemesterNumber(
+                    return `📖 <u>${convertSemesterNumber(
                         sem.semester
                     )} Exam</u>\n${format(
                         addHours(new Date(sem.examDate || new Date()), 8), // workaround for timezone issue (server set to UTC+0)
                         "dd MMM yyyy h:mm a"
                     )} ${sem.examDuration && `(${sem.examDuration / 60} hrs)`}`;
                 } else {
-                    return `<u>${convertSemesterNumber(
+                    return `📖 <u>${convertSemesterNumber(
                         sem.semester
                     )} Exam</u>\nNo exam`;
                 }
@@ -439,21 +448,40 @@ function buildFullMessage(module: ModuleInformation) {
 
     msg += `\n\n`;
 
-    msg += `${module.description ? module.description : ""}\n\n`;
-
-    msg += `<u>Prerequisites</u>\n${
-        module.prerequisite ? module.prerequisite : "None"
+    msg += `${
+        module.description ? replaceWithLink(module.description) : ""
     }\n\n`;
 
-    msg += `<u>Corequisites</u>\n${
-        module.corequisite ? module.corequisite : "None"
+    msg += `❗️<u>Prerequisites</u>\n${
+        module.prerequisite ? replaceWithLink(module.prerequisite) : "None"
     }\n\n`;
 
-    msg += `<u>Preclusions</u>\n${module.preclusion ? module.preclusion : "None"}\n\n`;
-
-    msg += `<u>Workload</u>\n${
-        module.workload ? module.workload.toString() : "None"
+    msg += `🔗 <u>Corequisites</u>\n${
+        module.corequisite ? replaceWithLink(module.corequisite) : "None"
     }\n\n`;
+
+    msg += `⛔️ <u>Preclusions</u>\n${
+        module.preclusion ? replaceWithLink(module.preclusion) : "None"
+    }\n\n`;
+
+    if (
+        module.workload &&
+        Array.isArray(module.workload) &&
+        module.workload.length === 5
+    ) {
+        msg += `🕔 <u>Workload (${module.workload.reduce(
+            (a, b) => a + b
+        )} hrs)</u>\n`;
+        msg += `${module.workload[0]} hrs - Lecture\n`;
+        msg += `${module.workload[1]} hrs - Tutorial\n`;
+        msg += `${module.workload[2]} hrs - Laboratory\n`;
+        msg += `${module.workload[3]} hrs - Project\n`;
+        msg += `${module.workload[4]} hrs - Preparation\n`;
+    } else {
+        msg += `🕔 <u>Workload</u>\n${
+            module.workload ? module.workload.toString() : "None"
+        }\n\n`;
+    }
 
     return msg;
 }
@@ -464,9 +492,8 @@ function buildListMessage(modules: ModuleInformation[]) {
     // max 100 modules
     modules = modules.slice(0, 100);
     msg += modules
-        .map(
-            (module, index) =>
-                trim(`${index + 1}. ${module.moduleCode} ${module.title}`, 40)
+        .map((module, index) =>
+            trim(`${index + 1}. ${module.moduleCode} ${module.title}`, 40)
         )
         .join("\n");
 
@@ -492,6 +519,20 @@ function convertSemesterNumber(sem: number) {
     }
 }
 
+function replaceWithLink(string: string) {
+    // replace any module code occurences that are in CACHE with a link to NUSMods
+
+    // source: https://stackoverflow.com/questions/31201690/find-word-not-followed-by-a-certain-character
+    // https://regex101.com/r/RIlEaj/1
+    const regex = /([A-Z]{2,4}[0-9]{4}([A-Z]){0,3})(?!(%|\/))/gm;
+
+    const res = string.replace(
+        regex,
+        (match) => `<a href='https://nusmods.com/modules/${match}'>${match}</a>`
+    );
+    return res;
+}
+
 bot.launch().then(() => console.log("Bot is running!"));
 
 // Enable graceful stop
@@ -502,4 +543,3 @@ process.on("uncaughtException", console.log);
 process.on("unhandledRejection", console.log);
 process.on("warning", console.log);
 process.on("error", console.log);
-
