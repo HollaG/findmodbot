@@ -37,7 +37,10 @@ if (!ACAD_YEAR) {
 
 bot.start((ctx) => {
     ctx.reply(
-        `<u><i><b>This bot is for accessing NUSMods from within Telegram.</b></i></u>\n\nSend a message (3 to 64 characters long) to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in any chat, even those without the bot in it. \nType @${ctx.me} [your search query] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`
+        `<u><i><b>This bot is for accessing NUSMods from within Telegram.</b></i></u>\n\nSend a message (3 to 64 characters long) to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in any chat, even those without the bot in it. \nType @${ctx.me} [your search query] in any chat to use it. \n\nFor example, to search for all modules containing 'GEA', type \n@${ctx.me} GEA`,
+        {
+            parse_mode: "HTML",
+        }
     );
 });
 let runs = 0;
@@ -408,7 +411,9 @@ function buildMessage(module: ModuleInformation) {
 
     msg += `\n\n`;
 
-    msg += `${module.description ? replaceWithLink(trim(module.description, 256)) : ""}`;
+    msg += `${
+        module.description ? replaceWithLink(trim(module.description, 256)) : ""
+    }`;
 
     return msg;
 }
@@ -487,7 +492,9 @@ function buildFullMessage(module: ModuleInformation) {
 }
 
 function buildListMessage(modules: ModuleInformation[]) {
-    let msg = `<b>${modules.length} modules found${modules.length > 100 ? " (showing first 100)" : ""}:</b>\n\n`;
+    let msg = `<b>${modules.length} modules found${
+        modules.length > 100 ? " (showing first 100)" : ""
+    }:</b>\n\n`;
 
     // max 100 modules
     modules = modules.slice(0, 100);
