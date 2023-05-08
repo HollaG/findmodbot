@@ -531,7 +531,9 @@ function replaceWithLink(string: string) {
 
     // source: https://stackoverflow.com/questions/31201690/find-word-not-followed-by-a-certain-character
     // https://regex101.com/r/RIlEaj/1
-    const regex = /([A-Z]{2,4}[0-9]{4}([A-Z]){0,3})(?!(%|\/|-))/gm;
+    // const regex = /([A-Z]{2,4}[0-9]{4}([A-Z]){0,3})(?!(%|\/|-))/gm;
+
+    const regex = /([A-Z]{2,4}[0-9]{4}([A-Z]){0,3})(?!%)/gm;
 
     const res = string.replace(
         regex,
