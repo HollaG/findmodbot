@@ -37,7 +37,7 @@ if (!ACAD_YEAR) {
 
 bot.start((ctx) => {
     ctx.reply(
-        `<u><i><b>This bot is for accessing NUSMods from within Telegram.</b></i></u>\n\nSend a message (2 to 64 characters long) to this bot to search for a module! You can search by module title or module code. \n\nThis bot also works in any chat, even those without the bot in it. \nType @${ctx.me} [your search query] in any chat to use it. \n\nFor example, to search for all courses containing 'GEA', type \n@${ctx.me} GEA`,
+        `<u><i><b>This bot is for accessing NUSMods from within Telegram.</b></i></u>\n\nSend a message (2 to 64 characters long) to this bot to search for a course! You can search by course title or course code. \n\nThis bot also works in any chat, even those without the bot in it. \nType @${ctx.me} [your search query] in any chat to use it. \n\nFor example, to search for all courses containing 'GEA', type \n@${ctx.me} GEA`,
         {
             parse_mode: "HTML",
         }
@@ -245,7 +245,7 @@ bot.on("callback_query", async (ctx) => {
     }
 });
 
-bot.command("module", async (ctx) => {
+bot.command("course", async (ctx) => {
     console.log(ctx.message.text);
 });
 
@@ -430,7 +430,7 @@ function buildFullMessage(module: ModuleInformation) {
     }\n\n`;
 
     if (!module.semesterData || module.semesterData.length === 0) {
-        msg += `❌ This module is not offered in this academic year!`;
+        msg += `❌ This course is not offered in this academic year!`;
     } else {
         msg += `${module.semesterData
             .map((sem) => `✅ ${convertSemesterNumber(sem.semester)}`)
